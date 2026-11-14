@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101211" />
+    <meta name="description" content="Prepare PCB milling, drilling, and outline toolpaths with pcb2gcode." />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <title>PCB2gcode</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/simulator.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <main class="main" id="workspace">
+        <header class="topbar"><a class="brand-wordmark" href="/">PCB2gcode</a><div class="topbar-right"><button class="theme-button" id="themeButton" aria-label="Toggle color theme" title="Toggle color theme"><img src="/favicon.ico" alt="" /></button></div></header>
+
+        <div class="content-grid">
+          <div class="form-column">
+            <section class="panel" id="files">
+              <div class="panel-heading"><div><h2>Board files</h2><p>Add the layers you want to manufacture.</p></div><span class="optional-tag">GERBER · EXCELLON</span></div>
+              <div class="upload-grid">
+                <label class="file-slot" data-role="front"><span class="slot-copy"><strong>Front copper</strong><small>Top copper traces</small></span><input type="file" accept=".gbr,.ger,.gerber,.pho,.gtl" /></label>
+                <label class="file-slot" data-role="back"><span class="slot-copy"><strong>Back copper</strong><small>Bottom copper traces</small></span><input type="file" accept=".gbr,.ger,.gerber,.pho,.gbl" /></label>
+                <label class="file-slot" data-role="outline"><span class="slot-copy"><strong>Board outline</strong><small>Edge cuts / profile</small></span><input type="file" accept=".gbr,.ger,.gerber,.gm1,.gko" /></label>
+                <label class="file-slot" data-role="drill"><span class="slot-copy"><strong>Plated drill (PTH)</strong><small>Excellon plated holes</small></span><input type="file" accept=".drl,.xln,.txt,.tap" /></label>
+                <label class="file-slot" data-role="npth"><span class="slot-copy"><strong>Non-plated drill (NPTH)</strong><small>Excellon unplated holes</small></span><input type="file" accept=".drl,.xln,.txt,.tap" /></label>
+                <label class="file-slot" data-role="job"><span class="slot-copy"><strong>KiCad board job</strong><small>Optional board thickness source</small></span><input type="file" accept=".gbrjob,.json" /></label>
+              </div>
+              <div class="board-meta-inline" id="boardMetadataCard" hidden><div id="boardMetadataDetails"></div></div>
+            </section>
+
+            <section class="panel" id="settings">
+              <div class="panel-heading"><div><h2>Tool setup</h2><p>Set the essentials for your machine and stock.</p></div><div class="unit-toggle" role="group" aria-label="Units"><button class="selected" data-units="metric">mm</button><button data-units="imperial">in</button></div></div>
+              <div class="field-grid">
+                <label class="field"><span>Isolation tool diameter <i>?</i></span><div class="input-wrap"><input name="toolDiameter" type="number" min="0.01" step="0.01" value="0.20" required /><small class="unit-label">mm</small></div><small class="hint">V-bit or end mill cutting width</small></label>
+                <label class="field"><span>Isolation width <i>?</i></span><div class="input-wrap"><input name="isolation" type="number" min="0" step="0.01" value="0.00" /><small class="unit-label">mm</small></div><small class="hint">Minimum copper clearance; 0 uses tool width</small></label>
+                <label class="field"><span>XY feed rate</span><div class="input-wrap"><input name="feedRate" type="number" min="1" step="1" value="100" required /><small class="unit-label">mm/min</small></div><small class="hint">Horizontal milling speed</small></label>
+                <label class="field"><span>Engraving depth</span><div class="input-wrap"><input name="passDepth" type="number" max="-0.001" step="0.01" value="-0.05" required /><small class="unit-label">mm</small></div><small class="hint">Negative Z depth into the copper</small></label>
+                <label class="field"><span>Safe Z height</span><div class="input-wrap"><input name="zSafe" type="number" min="0.1" step="0.1" value="2.00" required /><small class="unit-label">mm</small></div><small class="hint">Clearance height for rapid moves</small></label>
+                <label class="field"><span>Spindle speed</span><div class="input-wrap"><input name="millSpeed" type="number" min="0" step="100" value="10000" /><small class="unit-label">rpm</small></div><small class="hint">Spindle RPM during isolation</small></label>
+              </div>
+              <div class="main-config-group">
+                <div class="main-config-heading"><span>DRILLING</span><small>Excellon tool changes are carried through to the simulator</small></div>
+                <div class="field-grid compact">
+                  <label class="field"><span>Drill depth</span><div class="input-wrap"><input name="zdrill" type="number" max="-0.001" step="0.1" value="-1.8" /><small class="unit-label">mm</small></div></label>
+                  <label class="field"><span>Drill feed rate</span><div class="input-wrap"><input name="drillFeed" type="number" min="1" value="60" /><small class="unit-label">mm/min</small></div></label>
+                  <label class="field"><span>Drill spindle speed</span><div class="input-wrap"><input name="drillSpeed" type="number" min="0" step="100" value="10000" /><small class="unit-label">rpm</small></div></label>
+                  <label class="field"><span>Available drill bit diameters</span><div class="input-wrap"><input name="drillsAvailable" type="text" placeholder="All Excellon tools, or e.g. 0.8, 1.0, 1.2" /><small class="unit-label">mm</small></div><small class="hint">Blank uses every diameter defined by the drill files</small></label>
+                  <label class="check-field"><input name="oneDrill" type="checkbox" /><span><b>Use one drill bit size</b><small>Assign all holes to a single available tool</small></span></label>
+                  <label class="field"><span>Mill-drill holes at or above</span><div class="input-wrap"><input name="millDrillThreshold" type="number" min="0" step="0.01" placeholder="Disable" /><small class="unit-label">mm</small></div><small class="hint">Larger holes are interpolated with an end mill</small></label>
+                  <label class="field"><span>Mill-drill cutter diameter</span><div class="input-wrap"><input name="millDrillDiameter" type="number" min="0.01" step="0.05" placeholder="Use isolation bit" /><small class="unit-label">mm</small></div></label>
+                  <label class="field"><span>Mill-drill depth</span><div class="input-wrap"><input name="zMillDrill" type="number" max="-0.001" step="0.1" placeholder="Use drill depth" /><small class="unit-label">mm</small></div></label>
+                </div>
+              </div>
+              <div class="divider"></div>
+              <details class="advanced">
+                <summary>More machining options</summary>
+                <div class="advanced-content">
+                  <div class="advanced-group"><h3>Isolation milling</h3><div class="field-grid compact">
+                    <label class="field"><span>Mill bit diameters</span><div class="input-wrap"><input name="millDiameters" type="text" placeholder="Use main bit or enter multiple sizes" /><small class="unit-label">mm</small></div><small class="hint">Optional comma-separated sizes in tool-change order</small></label>
+                    <label class="field"><span>Milling overlap</span><div class="input-wrap"><input name="millingOverlap" type="number" min="0" max="100" value="50" /><small class="unit-label">%</small></div></label>
+                    <label class="field"><span>Additional offset</span><div class="input-wrap"><input name="offset" type="number" step="0.01" value="0" /><small class="unit-label">mm</small></div></label>
+                    <label class="field"><span>Isolation passes</span><div class="input-wrap"><input name="millInfeed" type="number" min="0" step="0.01" placeholder="Auto" /><small class="unit-label">mm</small></div></label>
+                    <label class="check-field"><input name="voronoi" type="checkbox" /><span><b>Voronoi milling</b><small>Generate centerline paths for filled copper</small></span></label>
+                    <label class="check-field"><input name="invertGerbers" type="checkbox" /><span><b>Invert Gerber polarity</b><small>Mill inside the defined shapes</small></span></label>
+                  </div></div>
+                  <div class="advanced-group"><h3>Drilling &amp; outline</h3><div class="field-grid compact">
+                    <label class="field"><span>Cutter diameter</span><div class="input-wrap"><input name="cutterDiameter" type="number" min="0.01" step="0.1" value="1.0" /><small class="unit-label">mm</small></div></label>
+                    <label class="field"><span>Cut depth</span><div class="input-wrap"><input name="zcut" type="number" max="-0.001" step="0.1" value="-1.8" /><small class="unit-label">mm</small></div></label>
+                    <label class="field"><span>Cut infeed per pass</span><div class="input-wrap"><input name="cutInfeed" type="number" min="0.01" step="0.1" value="0.6" /><small class="unit-label">mm</small></div></label>
+                    <label class="field"><span>Outline feed rate</span><div class="input-wrap"><input name="cutFeed" type="number" min="1" step="1" value="80" /><small class="unit-label">mm/min</small></div></label>
+                    <label class="field"><span>Outline spindle speed</span><div class="input-wrap"><input name="cutSpeed" type="number" min="0" step="100" value="10000" /><small class="unit-label">rpm</small></div></label>
+                    <label class="field"><span>Outline bridges</span><div class="input-wrap"><input name="bridges" type="number" min="0" step="0.1" value="0" /><small class="unit-label">mm</small></div></label>
+                  </div></div>
+                  <div class="advanced-group"><h3>Alignment &amp; optimization</h3><div class="field-grid compact">
+                    <label class="field"><span>Board flip axis X</span><div class="input-wrap"><input name="mirrorAxis" type="number" step="0.1" value="0" /><small class="unit-label">mm</small></div></label>
+                    <label class="field"><span>Toolpath tolerance</span><div class="input-wrap"><input name="tolerance" type="number" min="0" step="0.001" value="0.003" /><small class="unit-label">mm</small></div></label>
+                    <label class="field"><span>Output name</span><input name="basename" type="text" value="board" maxlength="64" /></label>
+                    <label class="check-field"><input name="zeroStart" type="checkbox" checked /><span><b>Start at machine zero</b><small>Set project start point to (0, 0)</small></span></label>
+                    <label class="check-field"><input name="eulerian" type="checkbox" checked /><span><b>Optimize overlapping paths</b><small>Avoid milling the same path twice</small></span></label>
+                  </div></div>
+                  <div class="advanced-group"><h3>CNC movement</h3><div class="field-grid compact">
+                    <label class="field"><span>Tool-change height</span><div class="input-wrap"><input name="zchange" type="number" min="0.01" step="0.1" value="10" /><small class="unit-label">mm</small></div><small class="hint">Z position for manual tool changes</small></label>
+                    <label class="field"><span>Board thickness</span><div class="input-wrap"><input name="boardThickness" type="number" min="0.1" step="0.1" value="1.6" /><small class="unit-label">mm</small></div><small class="hint">Used to set stock depth in the toolpath simulator</small></label>
+                    <label class="field"><span>Spindle spin-up time</span><div class="input-wrap"><input name="spinupTime" type="number" min="0" step="0.1" value="0.5" /><small class="unit-label">s</small></div></label>
+                    <label class="check-field"><input name="zchangeAbsolute" type="checkbox" /><span><b>Absolute machine coordinate</b><small>Use G53 for tool-change height</small></span></label>
+                  </div></div>
+                  <div class="advanced-group"><h3>Drill and contour control</h3><div class="field-grid compact">
+                    <label class="field"><span>Drill side</span><select name="drillSide"><option value="auto">Automatic</option><option value="front">Front</option><option value="back">Back</option></select></label>
+                    <label class="field"><span>Contour cut side</span><select name="cutSide"><option value="auto">Automatic</option><option value="front">Front</option><option value="back">Back</option></select></label>
+                    <label class="field"><span>Origin X offset</span><div class="input-wrap"><input name="xOffset" type="number" step="0.1" value="0" /><small class="unit-label">mm</small></div></label>
+                    <label class="field"><span>Origin Y offset</span><div class="input-wrap"><input name="yOffset" type="number" step="0.1" value="0" /><small class="unit-label">mm</small></div></label>
+                    <label class="field"><span>Back-side flip axis Y</span><div class="input-wrap"><input name="mirrorYAxis" type="number" step="0.1" value="0" /><small class="unit-label">mm</small></div></label>
+                    <label class="field"><span>Outline vertical feed</span><div class="input-wrap"><input name="cutVertFeed" type="number" min="1" placeholder="Use outline feed" /><small class="unit-label">mm/min</small></div></label>
+                    <label class="field"><span>Isolation vertical feed</span><div class="input-wrap"><input name="millVertFeed" type="number" min="1" placeholder="Use isolation feed" /><small class="unit-label">mm/min</small></div></label>
+                    <label class="field"><span>Bridge count</span><input name="bridgesNum" type="number" min="0" step="1" value="2" /></label>
+                    <label class="field"><span>Bridge height</span><div class="input-wrap"><input name="zBridges" type="number" step="0.1" placeholder="Use safe Z" /><small class="unit-label">mm</small></div></label>
+                    <label class="check-field"><input name="nog81" type="checkbox" checked /><span><b>Expand drill cycles to G0/G1</b><small>Better controller compatibility and 3D simulation</small></span></label>
+                    <label class="check-field"><input name="noM6" type="checkbox" /><span><b>Suppress M6 tool-change codes</b></span></label>
+                    <label class="check-field"><input name="fillOutline" type="checkbox" checked /><span><b>Accept outline contours</b><small>Enable when the outline is not a closed polygon</small></span></label>
+                  </div></div>
+                  <div class="advanced-group"><h3>Autolevelling probe</h3><div class="field-grid compact">
+                    <label class="field"><span>Probe target software</span><select name="software"><option value="linuxcnc">LinuxCNC</option><option value="mach3">Mach3</option><option value="mach4">Mach4</option><option value="custom">Custom</option></select></label>
+                    <label class="field"><span>Probe grid spacing X</span><div class="input-wrap"><input name="alX" type="number" min="0.1" step="0.1" placeholder="Required when enabled" /><small class="unit-label">mm</small></div></label>
+                    <label class="field"><span>Probe grid spacing Y</span><div class="input-wrap"><input name="alY" type="number" min="0.1" step="0.1" placeholder="Required when enabled" /><small class="unit-label">mm</small></div></label>
+                    <label class="field"><span>Probe feed rate</span><div class="input-wrap"><input name="alProbeFeed" type="number" min="0.1" step="1" placeholder="Required when enabled" /><small class="unit-label">mm/min</small></div></label>
+                    <label class="field"><span>Probe command</span><input name="alProbeCode" type="text" value="G31" /></label>
+                    <label class="field"><span>Probe result variable</span><input name="alProbeVar" type="number" min="1" step="1" value="2002" /></label>
+                    <label class="field"><span>Set probed Z zero command</span><input name="alSetZZero" type="text" value="G92 Z0" /></label>
+                    <label class="check-field"><input name="alFront" type="checkbox" /><span><b>Autolevel front copper</b></span></label>
+                    <label class="check-field"><input name="alBack" type="checkbox" /><span><b>Autolevel back copper</b></span></label>
+                  </div></div>
+                  <div class="advanced-group"><h3>Toolpath optimization and repeats</h3><div class="field-grid compact">
+                    <label class="field"><span>G-code optimization tolerance</span><div class="input-wrap"><input name="optimise" type="number" min="0" step="0.0001" value="0.00254" /><small class="unit-label">mm</small></div></label>
+                    <label class="field"><span>Path finding lookahead</span><input name="pathFindingLimit" type="number" min="0" step="1" value="1" /></label>
+                    <label class="field"><span>Rapid vertical speed</span><div class="input-wrap"><input name="g0VerticalSpeed" type="number" min="0" step="0.001" value="0.0211667" /><small class="unit-label">m/s</small></div></label>
+                    <label class="field"><span>Rapid horizontal speed</span><div class="input-wrap"><input name="g0HorizontalSpeed" type="number" min="0" step="0.001" value="0.0423333" /><small class="unit-label">m/s</small></div></label>
+                    <label class="field"><span>Backtrack speed</span><div class="input-wrap"><input name="backtrack" type="number" min="0" step="0.001" placeholder="Disabled" /><small class="unit-label">m/s</small></div></label>
+                    <label class="field"><span>Tile columns</span><input name="tileX" type="number" min="1" step="1" value="1" /></label>
+                    <label class="field"><span>Tile rows</span><input name="tileY" type="number" min="1" step="1" value="1" /></label>
+                    <label class="field"><span>Spindle spin-down time</span><div class="input-wrap"><input name="spindownTime" type="number" min="0" step="0.1" placeholder="Automatic" /><small class="unit-label">s</small></div></label>
+                    <label class="field"><span>Mill feed direction</span><select name="millFeedDirection"><option value="0">Default</option><option value="1">Reverse</option></select></label>
+                    <label class="field"><span>Probe-on G-code</span><input name="alProbeOn" type="text" placeholder="Default machine pause" /></label>
+                    <label class="field"><span>Probe-off G-code</span><input name="alProbeOff" type="text" placeholder="Default machine pause" /></label>
+                    <label class="check-field"><input name="tsp2opt" type="checkbox" checked /><span><b>Use 2-opt path planning</b></span></label>
+                    <label class="check-field"><input name="preserveThermals" type="checkbox" checked /><span><b>Preserve thermal reliefs</b></span></label>
+                    <label class="check-field"><input name="drawGerberLines" type="checkbox" /><span><b>Interpret Gerber strokes as lines</b></span></label>
+                    <label class="check-field"><input name="noG64" type="checkbox" /><span><b>Do not emit G64 path tolerance</b></span></label>
+                    <label class="check-field"><input name="sanityChecks" type="checkbox" checked /><span><b>Run pcb2gcode sanity checks</b></span></label>
+                    <label class="check-field"><input name="singleThread" type="checkbox" /><span><b>Disable multithreading</b></span></label>
+                  </div></div>
+                  <div class="advanced-group"><h3>Custom machine code</h3><div class="field-grid compact">
+                    <label class="field"><span>Before each milling trace</span><textarea name="preMillingCode" rows="2" maxlength="2000" placeholder="Optional G-code"></textarea></label>
+                    <label class="field"><span>After each milling trace</span><textarea name="postMillingCode" rows="2" maxlength="2000" placeholder="Optional G-code"></textarea></label>
+                    <label class="field"><span>G-code preamble</span><textarea name="preamble" rows="2" maxlength="8000" placeholder="Optional header commands"></textarea></label>
+                    <label class="field"><span>G-code postamble</span><textarea name="postamble" rows="2" maxlength="8000" placeholder="Optional ending commands"></textarea></label>
+                    <label class="field"><span>Preamble comment</span><textarea name="preambleText" rows="2" maxlength="4000" placeholder="Optional job note"></textarea></label>
+                  </div></div>
+                  <a class="all-features" href="/features.txt" target="_blank" rel="noreferrer">Complete pcb2gcode 3.1.0 CLI reference</a>
+                </div>
+              </details>
+            </section>
+            <section class="panel output-panel">
+              <div class="panel-heading">
+                <div><h2>Generate toolpaths</h2><p>Review your setup, then create G-code for the loaded layers.</p></div>
+              </div>
+              <div class="generate-row">
+                <div class="ready-state"><span><strong id="readyText">Add a board file to get started</strong><small id="readyHint">Your files stay in this local workspace.</small></span></div>
+                <button class="primary-button" id="generateButton"><span>Generate toolpaths</span></button>
+              </div>
+              <div class="error-box" id="errorBox" role="alert" hidden></div>
+              <section class="output-results" id="outputCard" hidden>
+                <div class="output-head">
+                  <div><div class="eyebrow">JOB OUTPUT</div><h2>Generated toolpaths <span id="outputCount"></span></h2><p class="output-summary" id="outputSummary">Ready to download or inspect in the simulator.</p></div>
+                  <div class="output-head-actions"><button type="button" class="simulate-button" id="viewCombinedToolpath" hidden>View combined toolpath</button><span class="output-status">READY</span></div>
+                </div>
+                <div class="output-list" id="outputList"></div>
+                <details class="log-details"><summary>Engine log</summary><pre id="engineLog"></pre></details>
+              </section>
+            </section>
+          </div>
+
+        </div>
+        <section class="simulator-panel" id="simulatorPanel" hidden><iframe id="simulatorFrame" title="Interactive CNC G-code simulator" loading="lazy"></iframe></section>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status"></div>
+  </body>
+</html>
