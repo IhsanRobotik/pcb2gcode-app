@@ -4,11 +4,14 @@
 import json
 import os
 import re
+import secrets
+import sqlite3
 import subprocess
 import tempfile
 import threading
 from email import policy
 from email.parser import BytesParser
+from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -26,6 +29,27 @@ FILE_EXTENSIONS = {".gbr", ".ger", ".gerber", ".pho", ".gtl", ".gbl", ".gm1", ".
 ROLES = {"front": "--front", "back": "--back", "outline": "--outline", "drill": "--drill"}
 UPLOAD_ROLES = {*ROLES, "npth"}
 GENERATION_LOCK = threading.Lock()
+VISITOR_DB = Path(os.environ.get("PCB2GCODE_VISITOR_DB", str(ROOT / ".data/visitors.sqlite3")))
+
+
+def register_visitor(cookie_header, database=None):
+    """Count a browser once using a random cookie; store no IP or browser details."""
+    cookies = SimpleCookie()
+    try:
+        cookies.load(cookie_header or "")
+    except CookieError:
+        cookies = SimpleCookie()
+    cookie = cookies.get("pcb2gcode_visitor")
+    visitor_id = cookie.value if cookie else ""
+    if not re.fullmatch(r"[0-9a-f]{32}", visitor_id):
+        visitor_id = secrets.token_hex(16)
+    database = Path(database) if database is not None else VISITOR_DB
+    database.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(database, timeout=10) as connection:
+        connection.execute("CREATE TABLE IF NOT EXISTS visitors (id TEXT PRIMARY KEY)")
+        connection.execute("INSERT OR IGNORE INTO visitors (id) VALUES (?)", (visitor_id,))
+        count = connection.execute("SELECT COUNT(*) FROM visitors").fetchone()[0]
+    return count, visitor_id
 
 
 def option_args(config, output_dir):
@@ -270,6 +294,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = unquote(urlsplit(self.path).path)
+        if path == "/api/visitors":
+            try:
+                count, visitor_id = register_visitor(self.headers.get("Cookie"))
+            except (OSError, sqlite3.Error):
+                return self.respond(503, {"error": "Visitor count is unavailable."})
+            return self.send_bytes(200, "application/json; charset=utf-8", json.dumps({"visitors": count}).encode("utf-8"), {
+                "Cache-Control": "no-store",
+                "Set-Cookie": f"pcb2gcode_visitor={visitor_id}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax",
+            })
         if path == "/api/example/front-gerber":
             try:
                 data = EXAMPLE_FRONT.read_bytes()
@@ -316,7 +349,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/features.txt":
             target = ROOT / "features.txt"
             content_type = "text/plain; charset=utf-8"
-        elif path in {"/index.html", "/app.js", "/styles.css", "/simulator.css", "/favicon.svg"}:
+        elif path in {"/index.html", "/app.js", "/styles.css", "/simulator.css", "/favicon.svg", "/New-Project.svg"}:
             target = ROOT / path.lstrip("/")
             content_type = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml"}[target.suffix]
         else:

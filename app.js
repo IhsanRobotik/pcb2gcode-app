@@ -219,6 +219,7 @@ function combineToolpathFiles(outputs) {
 }
 
 function sendToSimulator(payload, scroll = true) {
+  payload = { ...payload, downloadExtension: $("#downloadExtension").value };
   const frame = $("#simulatorFrame"), panel = $("#simulatorPanel");
   pendingSimulatorPayload = payload;
   panel.hidden = false;
@@ -231,10 +232,34 @@ function sendToSimulator(payload, scroll = true) {
 }
 
 window.addEventListener("message", (event) => {
-  if (event.origin !== location.origin || event.source !== $("#simulatorFrame").contentWindow || event.data?.type !== "pcb2gcode:ready") return;
+  if (event.origin !== location.origin || event.source !== $("#simulatorFrame").contentWindow) return;
+  if (event.data?.type === "pcb2gcode:scroll") {
+    if (typeof event.data.deltaY === "number" && Number.isFinite(event.data.deltaY)) {
+      window.scrollBy({ top: Math.max(-window.innerHeight, Math.min(window.innerHeight, event.data.deltaY)), behavior: "instant" });
+    }
+    return;
+  }
+  if (event.data?.type !== "pcb2gcode:ready") return;
   simulatorLoaded = true;
   $("#simulatorFrame").contentWindow.postMessage({ type: "pcb2gcode:theme", theme: document.body.classList.contains("light") ? "light" : "dark" }, location.origin);
   if (pendingSimulatorPayload) $("#simulatorFrame").contentWindow.postMessage(pendingSimulatorPayload, location.origin);
+});
+
+function downloadFilename(name) {
+  return name.replace(/\.(?:ngc|gcode|nc)$/i, "") + "." + $("#downloadExtension").value;
+}
+
+$("#downloadExtension").value = localStorage.getItem("toolpath-download-extension") === "nc" ? "nc" : "ngc";
+$("#downloadExtension").addEventListener("change", () => {
+  const downloadExtension = $("#downloadExtension").value;
+  localStorage.setItem("toolpath-download-extension", downloadExtension);
+  document.querySelectorAll("[data-output-name]").forEach((element) => {
+    const name = downloadFilename(element.dataset.outputName);
+    if (element instanceof HTMLAnchorElement) element.download = name;
+    else element.textContent = name;
+  });
+  if (pendingSimulatorPayload) pendingSimulatorPayload.downloadExtension = downloadExtension;
+  if (simulatorLoaded) $("#simulatorFrame").contentWindow.postMessage({ type: "pcb2gcode:download-format", downloadExtension }, location.origin);
 });
 
 function displayOutputs(result) {
@@ -252,7 +277,7 @@ function displayOutputs(result) {
     const description = document.createElement("div"); description.className = "output-file-copy";
     const kind = document.createElement("span"); kind.className = "output-operation";
     kind.textContent = /drill/i.test(output.name) ? "DRILLING" : /outline|profile|cut/i.test(output.name) ? "BOARD PROFILE" : /back/i.test(output.name) ? "BACK COPPER" : /front/i.test(output.name) ? "FRONT COPPER" : "TOOLPATH";
-    const filename = document.createElement("strong"); filename.textContent = output.name;
+    const filename = document.createElement("strong"); filename.dataset.outputName = output.name; filename.textContent = downloadFilename(output.name);
     const details = document.createElement("small"); details.textContent = `${moves.toLocaleString()} motion blocks · ${formatBytes(blob.size)}`;
     description.append(kind, filename, details); main.append(description);
     const actions = document.createElement("div"); actions.className = "output-actions";
@@ -266,7 +291,7 @@ function displayOutputs(result) {
       }, true);
     });
     const link = document.createElement("a"); link.className = "download-button"; link.href = URL.createObjectURL(blob); generatedUrls.push(link.href);
-    link.download = output.name; link.textContent = "Download";
+    link.dataset.outputName = output.name; link.download = downloadFilename(output.name); link.textContent = "Download";
     actions.append(simulate, link); row.append(main, actions); list.append(row);
   }
   $("#outputCount").textContent = `${lastOutput.length} FILE${lastOutput.length === 1 ? "" : "S"}`;
@@ -317,11 +342,27 @@ $("#generateButton").addEventListener("click", async () => {
   } finally { button.disabled = selectedFiles.size === 0; button.querySelector("span").textContent = "Generate toolpaths"; }
 });
 
+const browserColorScheme = window.matchMedia("(prefers-color-scheme: dark)");
+let selectedTheme = localStorage.getItem("toolpath-theme");
+if (!["light", "dark"].includes(selectedTheme)) selectedTheme = null;
+function applyTheme(theme) {
+  const isLight = theme === "light";
+  document.body.classList.toggle("light", isLight);
+  const action = isLight ? "Switch to dark mode" : "Switch to light mode";
+  $("#themeButton").setAttribute("aria-label", action);
+  $("#themeButton").title = action;
+  $("meta[name='theme-color']").content = isLight ? "#f2f4f0" : "#101211";
+  if (simulatorLoaded) $("#simulatorFrame").contentWindow.postMessage({ type: "pcb2gcode:theme", theme }, location.origin);
+}
+applyTheme(selectedTheme || (browserColorScheme.matches ? "dark" : "light"));
 $("#themeButton").addEventListener("click", () => {
-  document.body.classList.toggle("light"); localStorage.setItem("toolpath-theme", document.body.classList.contains("light") ? "light" : "dark");
-  if (simulatorLoaded) $("#simulatorFrame").contentWindow.postMessage({ type: "pcb2gcode:theme", theme: document.body.classList.contains("light") ? "light" : "dark" }, location.origin);
+  selectedTheme = document.body.classList.contains("light") ? "dark" : "light";
+  localStorage.setItem("toolpath-theme", selectedTheme);
+  applyTheme(selectedTheme);
 });
-if (localStorage.getItem("toolpath-theme") === "light") document.body.classList.add("light");
+browserColorScheme.addEventListener("change", (event) => {
+  if (!selectedTheme) applyTheme(event.matches ? "dark" : "light");
+});
 
 const unitConversions = ["toolDiameter", "isolation", "passDepth", "zSafe", "offset", "millInfeed", "zdrill", "cutterDiameter", "zcut", "cutInfeed", "bridges", "mirrorAxis", "mirrorYAxis", "xOffset", "yOffset", "tolerance", "zchange", "boardThickness", "millDrillThreshold", "millDrillDiameter", "zMillDrill", "zBridges", "millVertFeed", "cutVertFeed", "alX", "alY", "alProbeFeed"];
 document.querySelectorAll("[data-units]").forEach((button) => button.addEventListener("click", () => {
@@ -349,3 +390,18 @@ async function loadExampleGerber() {
 }
 refreshFiles();
 loadExampleGerber();
+
+async function loadVisitorCount() {
+  try {
+    const response = await fetch("/api/visitors", { cache: "no-store", credentials: "same-origin" });
+    if (!response.ok) throw new Error("Visitor count unavailable");
+    const result = await response.json();
+    if (!Number.isSafeInteger(result.visitors) || result.visitors < 1) throw new Error("Invalid visitor count");
+    $("#visitorCount").textContent = result.visitors.toLocaleString();
+    $("#visitorCounter").setAttribute("aria-label", `${result.visitors.toLocaleString()} visitors`);
+    $("#visitorCounter").hidden = false;
+  } catch {
+    $("#visitorCounter").hidden = true;
+  }
+}
+loadVisitorCount();

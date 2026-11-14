@@ -24,6 +24,15 @@ The service binds to loopback by default. Uploads and generated G-code are held 
 
 Run under a dedicated OS account, keep the app bound to loopback, and place TLS and access control at a reverse proxy if remote access is needed. Do not expose this unauthenticated local utility directly on a public interface. The server rejects cross-origin generation requests and passes browser settings through a validated CLI allowlist; input is never interpreted as a shell command.
 
+## Contact icons
+
+The top bar uses the `bootstrap-icons` npm package. Its SVGs are embedded locally, so no Node process is needed at runtime. To refresh them:
+
+```sh
+npm ci
+npm run build:icons
+```
+
 ## Simulator
 
 The 3D preview integrates [G-Code Simulator](https://github.com/federicovezzoli/gcode-simulator), an existing MIT-licensed CNC heightmap simulator. Its source is vendored at `vendor/gcode-simulator/`; upstream provenance and the local integration notes are in [`vendor/gcode-simulator/UPSTREAM.md`](vendor/gcode-simulator/UPSTREAM.md). The simulator accepts G0/G1/G2/G3 toolpaths, separates tool changes, and models material removal at configurable resolution. The app forwards generated G-code and stock dimensions to it in the browser.
@@ -46,3 +55,5 @@ Main controls cover isolation milling and drilling, including drill depth/feed/s
 [`features.txt`](./features.txt) is included and linked in the interface as the complete `pcb2gcode 3.1.0 --help` reference. It documents all engine options, including options that are intentionally not exposed as form controls.
 # pcb2gcode-app
 # pcb2gcode-app
+
+The visitor counter counts browsers using an anonymous cookie and stores its total in `.data/visitors.sqlite3`. Counts survive server restarts. Clearing cookies or using another browser counts as a new visitor. Set `PCB2GCODE_VISITOR_DB` to choose a different database path.
