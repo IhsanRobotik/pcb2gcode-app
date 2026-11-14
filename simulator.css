@@ -151,3 +151,5 @@
 .light .generation-actions .primary-button{background:#e5f0df;color:#2e5333;border-color:#b9cfae;box-shadow:0 2px 5px #24442b0a}
 .light .generation-actions .primary-button:hover:not(:disabled){background:#D0F0C0;border-color:#a9c797}
 .light .generation-actions .primary-button:active:not(:disabled){background:#bfd9ae}
+
+.contact-links .wiki-link{width:auto;padding:0 12px;font-size:12px;font-weight:500;white-space:nowrap;color:var(--accent-text)}

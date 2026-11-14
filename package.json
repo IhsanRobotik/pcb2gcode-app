@@ -3,9 +3,15 @@
   "private": true,
   "scripts": {
     "build:icons": "node scripts/build-icons.cjs",
-    "test": "node --test tests/*.test.cjs"
+    "test": "node --test tests/*.test.cjs",
+    "build:wiki": "node scripts/build-wiki.cjs"
   },
   "devDependencies": {
-    "bootstrap-icons": "^1.13.2"
+    "bootstrap-icons": "^1.13.2",
+    "dompurify": "^3.4.17",
+    "marked": "^18.2.0"
+  },
+  "engines": {
+    "node": ">=20.9.0"
   }
 }

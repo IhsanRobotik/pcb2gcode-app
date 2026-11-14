@@ -54,7 +54,7 @@ document.querySelectorAll(".file-slot input").forEach((input) => {
     if (file) {
       const role = input.closest(".file-slot").dataset.role;
       const total = [...selectedFiles.entries()].reduce((size, [key, item]) => size + (key === role ? 0 : item.size), file.size);
-      if (total > 100 * 1024 * 1024) { toast("Board files must total 100 MB or less"); input.value = ""; return; }
+      if (total > 10 * 1024 * 1024) { toast("Board files must total 10 MB or less"); input.value = ""; return; }
       selectedFiles.set(role, file); fileRevision++;
       if (role === "job") await readJobFile(file);
     }
@@ -71,7 +71,7 @@ document.querySelectorAll(".file-slot").forEach((slot) => {
     if (file) {
       const role = slot.dataset.role;
       const total = [...selectedFiles.entries()].reduce((size, [key, item]) => size + (key === role ? 0 : item.size), file.size);
-      if (total > 100 * 1024 * 1024) { toast("Board files must total 100 MB or less"); return; }
+      if (total > 10 * 1024 * 1024) { toast("Board files must total 10 MB or less"); return; }
       selectedFiles.set(role, file); fileRevision++; refreshFiles();
       if (role === "job") await readJobFile(file);
       markGenerationDirty();
@@ -297,7 +297,7 @@ function displayOutputs(result) {
     const details = document.createElement("small"); details.textContent = `${moves.toLocaleString()} motion blocks · ${formatBytes(blob.size)}`;
     description.append(kind, filename, details); main.append(description);
     const actions = document.createElement("div"); actions.className = "output-actions";
-    const simulate = document.createElement("button"); simulate.type = "button"; simulate.className = "simulate-button"; simulate.textContent = "View 3D";
+    const simulate = document.createElement("button"); simulate.type = "button"; simulate.className = "simulate-button"; simulate.textContent = "Preview Toolpath";
     simulate.addEventListener("click", () => {
       const prepared = simulatorFilePreview(output);
       sendToSimulator({
@@ -421,6 +421,11 @@ $("#themeButton").addEventListener("click", () => {
 browserColorScheme.addEventListener("change", (event) => {
   if (!selectedTheme) applyTheme(event.matches ? "dark" : "light");
 });
+window.addEventListener("storage", (event) => {
+  if (event.key !== "toolpath-theme") return;
+  selectedTheme = ["light", "dark"].includes(event.newValue) ? event.newValue : null;
+  applyTheme(selectedTheme || (browserColorScheme.matches ? "dark" : "light"));
+});
 
 const unitConversions = ["toolDiameter", "isolation", "passDepth", "zSafe", "offset", "millInfeed", "zdrill", "cutterDiameter", "zcut", "cutInfeed", "bridges", "mirrorAxis", "mirrorYAxis", "xOffset", "yOffset", "tolerance", "zchange", "boardThickness", "millDrillThreshold", "millDrillDiameter", "zMillDrill", "zBridges", "millVertFeed", "cutVertFeed", "alX", "alY", "alProbeFeed"];
 document.querySelectorAll("[data-units]").forEach((button) => button.addEventListener("click", () => {
@@ -480,7 +485,7 @@ async function loadSelectedExample() {
   $("#exampleBoard").disabled = true;
   $("#refreshExamplesButton").disabled = true;
   try {
-    if (example.files.reduce((size, file) => size + file.size, 0) > 100 * 1024 * 1024) throw new Error("Board files must total 100 MB or less.");
+    if (example.files.reduce((size, file) => size + file.size, 0) > 10 * 1024 * 1024) throw new Error("Board files must total 10 MB or less.");
     const assignedRoles = new Set();
     for (const file of example.files) {
       if (assignedRoles.has(file.role)) throw new Error(`This example has multiple ${exampleRoleLabels[file.role]} files. Place each board variant in its own subfolder.`);
@@ -492,7 +497,7 @@ async function loadSelectedExample() {
       const safeFilename = entry.name.normalize("NFKD").replace(/[^A-Za-z0-9_. -]/g, "_").slice(-120);
       return [entry.role, new File([await response.blob()], safeFilename, { type: "application/octet-stream" })];
     }));
-    if (loaded.reduce((size, [, file]) => size + file.size, 0) > 100 * 1024 * 1024) throw new Error("Board files must total 100 MB or less.");
+    if (loaded.reduce((size, [, file]) => size + file.size, 0) > 10 * 1024 * 1024) throw new Error("Board files must total 10 MB or less.");
     selectedFiles.clear();
     for (const [role, file] of loaded) selectedFiles.set(role, file);
     fileRevision++;

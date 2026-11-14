@@ -18,16 +18,18 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from examples import discover_examples, resolve_example_file
+from wiki_content import IMAGE_TYPES, wiki_file, wiki_pages
 
 ROOT = Path(__file__).resolve().parent
 SIMULATOR_ROOT = ROOT / "vendor/gcode-simulator/out"
 PCB2GCODE = Path(os.environ.get("PCB2GCODE_BIN", str(ROOT.parent / "pcb2gcode/build/pcb2gcode"))).resolve()
 HOST = os.environ.get("PCB2GCODE_HOST", "127.0.0.1")
 PORT = int(os.environ.get("PCB2GCODE_PORT", "8080"))
-MAX_REQUEST = 100 * 1024 * 1024
+MAX_REQUEST = 10 * 1024 * 1024
 MAX_OUTPUT = 20 * 1024 * 1024
 MAX_FILES = 20
 EXAMPLES_ROOT = ROOT / "gerber"
+WIKI_ROOT = Path(os.environ.get("PCB2GCODE_WIKI_DIR", str(ROOT / "pcb2gcode.wiki")))
 FILE_EXTENSIONS = {".gbr", ".ger", ".gerber", ".pho", ".gtl", ".gbl", ".gm1", ".gko", ".drl", ".xln", ".txt", ".tap"}
 ROLES = {"front": "--front", "back": "--back", "outline": "--outline", "drill": "--drill"}
 UPLOAD_ROLES = {*ROLES, "npth"}
@@ -298,6 +300,31 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = unquote(urlsplit(self.path).path)
+        if path == "/api/wiki":
+            try:
+                pages = wiki_pages(WIKI_ROOT)
+            except (OSError, UnicodeError, ValueError):
+                return self.respond(503, {"error": "The local wiki could not be read."})
+            return self.send_bytes(200, "application/json; charset=utf-8", json.dumps({"pages": pages}).encode("utf-8"), {"Cache-Control": "no-store"})
+        if path == "/api/wiki/asset":
+            relative = parse_qs(urlsplit(self.path).query).get("path", [""])[0]
+            try:
+                target = wiki_file(WIKI_ROOT, relative)
+                content_type = IMAGE_TYPES.get(target.suffix.lower())
+                if not content_type or target.stat().st_size > 20 * 1024 * 1024:
+                    return self.respond(404, {"error": "Wiki image not found."})
+                return self.send_bytes(200, content_type, target.read_bytes(), {"Cache-Control": "no-cache"})
+            except (OSError, ValueError):
+                return self.respond(404, {"error": "Wiki image not found."})
+        if path in {"/wiki", "/wiki/"}:
+            return self.send_bytes(200, "text/html; charset=utf-8", (ROOT / "wiki.html").read_bytes(), {"Cache-Control": "no-cache"},
+                                   "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; img-src 'self' data: https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
+        if path in {"/wiki-runtime/marked.js", "/wiki-runtime/purify.js"}:
+            target = ROOT / "vendor/wiki-runtime" / path.rsplit("/", 1)[-1]
+            try:
+                return self.send_bytes(200, "text/javascript; charset=utf-8", target.read_bytes(), {"Cache-Control": "no-cache"})
+            except OSError:
+                return self.respond(503, {"error": "Run npm run build:wiki to prepare the documentation renderer."})
         if path == "/api/visitors":
             try:
                 count, visitor_id = register_visitor(self.headers.get("Cookie"))
@@ -318,7 +345,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 target = resolve_example_file(EXAMPLES_ROOT, relative)
                 if target.stat().st_size > MAX_REQUEST:
-                    return self.respond(413, {"error": "Example file exceeds the 100 MB limit."})
+                    return self.respond(413, {"error": "Example file exceeds the 10 MB limit."})
                 data = target.read_bytes()
             except (OSError, ValueError):
                 return self.respond(404, {"error": "Example file not found."})
@@ -362,7 +389,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/features.txt":
             target = ROOT / "features.txt"
             content_type = "text/plain; charset=utf-8"
-        elif path in {"/index.html", "/app.js", "/preview.js", "/styles.css", "/simulator.css", "/favicon.svg", "/New-Project.svg"}:
+        elif path in {"/index.html", "/app.js", "/preview.js", "/styles.css", "/simulator.css", "/favicon.svg", "/New-Project.svg", "/wiki.js", "/wiki.css"}:
             target = ROOT / path.lstrip("/")
             content_type = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml"}[target.suffix]
         else:
@@ -385,7 +412,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return self.respond(400, {"error": "Invalid request length."})
         if not 1 <= length <= MAX_REQUEST:
-            return self.respond(413, {"error": "Upload must be between 1 byte and 100 MB."})
+            return self.respond(413, {"error": "Upload must be between 1 byte and 10 MB."})
         content_type = self.headers.get("Content-Type", "")
         if not content_type.startswith("multipart/form-data;"):
             return self.respond(415, {"error": "Upload board files using multipart form data."})
@@ -410,7 +437,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(400, {"error": "Choose one file for each copper, profile, and drill layer."})
         total = sum(len(data) for _, _, data in uploads)
         if total == 0 or total > MAX_REQUEST:
-            return self.respond(413, {"error": "Board files must total between 1 byte and 100 MB."})
+            return self.respond(413, {"error": "Board files must total between 1 byte and 10 MB."})
 
         if not GENERATION_LOCK.acquire(blocking=False):
             return self.respond(429, {"error": "Another job is generating. Please wait for it to finish."})
