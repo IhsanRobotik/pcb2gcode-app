@@ -98,6 +98,7 @@ def option_args(config, output_dir):
     pass_depth = num("passDepth", -100, -0.001, True)
     z_safe = num("zSafe", 0.01, 500, True)
     z_change = num("zchange", 0.01, 1000, True)
+    backtrack = num("backtrack", 0, 100000)
     spinup = num("spinupTime", 0, 3600)
     mill_speed = num("millSpeed", 0, 100000)
     drill_speed = num("drillSpeed", 0, 100000)
@@ -111,7 +112,8 @@ def option_args(config, output_dir):
     args = ["--noconfigfile=true", "--metric", "--metricoutput", f"--output-dir={output_dir}", f"--basename={basename}",
             f"--mill-diameters={','.join(format(v, '.8g') for v in diameters)}",
             f"--isolation-width={isolation:g}", f"--mill-feed={feed_rate:g}", f"--zwork={pass_depth:g}", f"--zsafe={z_safe:g}",
-            f"--zchange={z_change:g}", f"--cut-feed={cut_feed:g}"]
+            f"--zchange={z_change:g}", f"--cut-feed={cut_feed:g}",
+            f"--backtrack={0 if backtrack is None else backtrack:g}"]
     if spinup is not None:
         args.append(f"--spinup-time={spinup:g}")
     if flag("zchangeAbsolute"):
@@ -148,7 +150,6 @@ def option_args(config, output_dir):
         "pathFindingLimit": (0, 100000, "--path-finding-limit", ""),
         "g0VerticalSpeed": (0, 10000, "--g0-vertical-speed", ""),
         "g0HorizontalSpeed": (0, 10000, "--g0-horizontal-speed", ""),
-        "backtrack": (0, 100000, "--backtrack", ""),
         "tileX": (1, 100, "--tile-x", ""),
         "tileY": (1, 100, "--tile-y", ""),
         "spindownTime": (0, 3600, "--spindown-time", ""),

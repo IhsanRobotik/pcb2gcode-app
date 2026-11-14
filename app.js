@@ -13,8 +13,6 @@ let simulatorLoaded = false;
 let simulatorRequested = false;
 let generationVersion = 0;
 let generationRunning = false;
-let generationPending = false;
-let generationTimer = 0;
 let exampleLoading = false;
 let fileRevision = 0;
 let lastGenerationSignature = "";
@@ -46,6 +44,7 @@ function refreshFiles() {
   $("#readyText").textContent = count ? `${count} layer${count === 1 ? "" : "s"} ready · ${formatBytes(total)}` : "Add a board file to get started";
   $("#readyHint").textContent = count ? "Outer copper, outline and drill files are processed locally." : "Your files stay in this local workspace.";
   $(".ready-state").classList.toggle("ready", count > 0);
+  updateGenerationButton();
 }
 function formatBytes(n) { return n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`; }
 
@@ -61,7 +60,7 @@ document.querySelectorAll(".file-slot input").forEach((input) => {
     }
     input.value = "";
     refreshFiles();
-    if (file) scheduleGeneration();
+    if (file) markGenerationDirty();
   });
 });
 document.querySelectorAll(".file-slot").forEach((slot) => {
@@ -75,7 +74,7 @@ document.querySelectorAll(".file-slot").forEach((slot) => {
       if (total > 100 * 1024 * 1024) { toast("Board files must total 100 MB or less"); return; }
       selectedFiles.set(role, file); fileRevision++; refreshFiles();
       if (role === "job") await readJobFile(file);
-      scheduleGeneration();
+      markGenerationDirty();
     }
   });
 });
@@ -341,40 +340,36 @@ $("#viewCombinedToolpath").addEventListener("click", () => {
   }
 });
 
+function hasBoardFiles() {
+  return [...selectedFiles.keys()].some((role) => engineRoles.has(role));
+}
+function updateGenerationButton() {
+  const button = $("#generateButton");
+  button.disabled = generationRunning || exampleLoading || !hasBoardFiles();
+  button.dataset.busy = String(generationRunning);
+  button.setAttribute("aria-busy", String(generationRunning));
+  button.querySelector(".generate-label").textContent = generationRunning ? "Generating…" : lastOutput.length ? "Re-generate toolpaths" : "Generate toolpaths";
+}
 function setGenerationStatus(text, state = "idle") {
   $("#generationStatus").textContent = text;
   $("#generationStatus").dataset.state = state;
   $("#outputCard").setAttribute("aria-busy", String(state === "busy"));
+  $("#generationProgress").hidden = state !== "busy";
+  updateGenerationButton();
 }
-function hasBoardFiles() {
-  return [...selectedFiles.keys()].some((role) => engineRoles.has(role));
-}
-function scheduleGeneration(delay = 600, force = false) {
+function markGenerationDirty() {
   const values = [...$("#settings").querySelectorAll("input, select, textarea")].map((input) => [input.name, input.type === "checkbox" ? input.checked : input.value]);
   const signature = JSON.stringify([fileRevision, units, values]);
-  if (!force && signature === lastGenerationSignature) return;
+  if (signature === lastGenerationSignature) return;
   lastGenerationSignature = signature;
   generationVersion++;
-  generationPending = hasBoardFiles();
-  window.clearTimeout(generationTimer);
-  generationTimer = 0;
   $("#errorBox").hidden = true;
-  $("#outputCard").hidden = true;
-  $("#simulatorPanel").hidden = true;
-  if (!generationPending) {
-    setGenerationStatus("Waiting for board files");
-    return;
-  }
-  setGenerationStatus(generationRunning ? "Queued latest changes…" : "Preparing toolpaths…", "busy");
-  generationTimer = window.setTimeout(() => {
-    generationTimer = 0;
-    generateToolpaths();
-  }, delay);
+  if (lastOutput.length) $("#outputSummary").textContent = "Previous toolpaths · re-generate to apply your changes.";
+  setGenerationStatus(generationRunning ? "Generating previous settings…" : hasBoardFiles() ? lastOutput.length ? "Changes ready to regenerate" : "Ready to generate" : "Waiting for board files", generationRunning ? "busy" : "idle");
 }
 async function generateToolpaths() {
-  if (generationRunning || exampleLoading || !generationPending || !hasBoardFiles()) return;
+  if (generationRunning || exampleLoading || !hasBoardFiles()) return;
   generationRunning = true;
-  generationPending = false;
   const version = generationVersion;
   const error = $("#errorBox");
   error.hidden = true;
@@ -396,13 +391,14 @@ async function generateToolpaths() {
     setGenerationStatus("Generation failed", "error");
   } finally {
     generationRunning = false;
-    if (generationPending && !exampleLoading && !generationTimer) {
-      generationTimer = window.setTimeout(() => { generationTimer = 0; generateToolpaths(); }, 0);
-    }
+    if (exampleLoading) setGenerationStatus("Loading example…", "busy");
+    else if (version !== generationVersion) setGenerationStatus(hasBoardFiles() ? "Inputs changed · generate again" : "Waiting for board files");
+    else updateGenerationButton();
   }
 }
-$("#settings").addEventListener("input", () => scheduleGeneration());
-$("#settings").addEventListener("change", () => scheduleGeneration());
+$("#generateButton").addEventListener("click", generateToolpaths);
+$("#settings").addEventListener("input", markGenerationDirty);
+$("#settings").addEventListener("change", markGenerationDirty);
 
 const browserColorScheme = window.matchMedia("(prefers-color-scheme: dark)");
 let selectedTheme = localStorage.getItem("toolpath-theme");
@@ -436,7 +432,7 @@ document.querySelectorAll("[data-units]").forEach((button) => button.addEventLis
   units = next;
   document.querySelectorAll("[data-units]").forEach((item) => item.classList.toggle("selected", item === button));
   document.querySelectorAll(".unit-label").forEach((label) => { if (["feedRate", "drillFeed", "cutFeed", "millVertFeed", "cutVertFeed", "alProbeFeed"].includes(label.previousElementSibling.name)) label.textContent = next === "metric" ? "mm/min" : "in/min"; else if (label.textContent === "mm" || label.textContent === "in") label.textContent = next === "metric" ? "mm" : "in"; });
-  scheduleGeneration();
+  markGenerationDirty();
 }));
 
 let includedExamples = [];
@@ -445,7 +441,7 @@ function updateExampleSelection() {
   const example = includedExamples.find((item) => item.id === $("#exampleBoard").value);
   $("#exampleHint").textContent = example
     ? `${example.files.map((file) => exampleRoleLabels[file.role]).join(" · ")}. Loading replaces the selected board files.`
-    : "Choose a sample board to load and generate automatically, or upload your own files below.";
+    : "Choose a sample board, or upload your own files below. Generate toolpaths when you are ready.";
 }
 async function refreshExamples() {
   const select = $("#exampleBoard"), refresh = $("#refreshExamplesButton");
@@ -477,12 +473,9 @@ $("#refreshExamplesButton").addEventListener("click", refreshExamples);
 async function loadSelectedExample() {
   const example = includedExamples.find((item) => item.id === $("#exampleBoard").value);
   if (!example) return;
-  const resumeGeneration = generationRunning || generationPending;
   let loadedExample = false;
   exampleLoading = true;
   generationVersion++;
-  generationPending = false;
-  window.clearTimeout(generationTimer); generationTimer = 0;
   setGenerationStatus("Loading example…", "busy");
   $("#exampleBoard").disabled = true;
   $("#refreshExamplesButton").disabled = true;
@@ -516,7 +509,7 @@ async function loadSelectedExample() {
     $("#errorBox").hidden = true;
     refreshFiles();
     loadedExample = true;
-    $("#exampleHint").textContent = `${example.name} loaded. Toolpaths are generated automatically.`;
+    $("#exampleHint").textContent = `${example.name} loaded. Adjust settings, then click Generate toolpaths.`;
   } catch (error) {
     toast(error.message || "Could not load this example.");
     $("#exampleHint").textContent = error.message || "Could not load this example.";
@@ -524,8 +517,8 @@ async function loadSelectedExample() {
     exampleLoading = false;
     $("#exampleBoard").disabled = false;
     $("#refreshExamplesButton").disabled = false;
-    if (loadedExample || resumeGeneration || generationPending) scheduleGeneration(0, true);
-    else setGenerationStatus(lastOutput.length ? `${lastOutput.length} files ready` : "Waiting for board files", lastOutput.length ? "ready" : "idle");
+    if (loadedExample) markGenerationDirty();
+    else setGenerationStatus(generationRunning ? "Generating…" : lastOutput.length ? `${lastOutput.length} files ready` : hasBoardFiles() ? "Ready to generate" : "Waiting for board files", generationRunning ? "busy" : lastOutput.length ? "ready" : "idle");
   }
 }
 refreshFiles();

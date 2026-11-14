@@ -47,7 +47,7 @@
   <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"/>
   <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"/>
 </svg></span></button>
-                <small id="exampleHint">Choose a sample board to load and generate automatically, or upload your own files below.</small>
+                <small id="exampleHint">Choose a sample board, or upload your own files below. Generate toolpaths when you are ready.</small>
               </div>
               <div class="upload-grid">
                 <label class="file-slot" data-role="front"><span class="slot-copy"><strong>Front copper</strong><small>Top copper traces</small></span><input type="file" accept=".gbr,.ger,.gerber,.pho,.gtl" /></label>
@@ -146,7 +146,7 @@
                     <label class="field"><span>Path finding lookahead</span><input name="pathFindingLimit" type="number" min="0" step="1" value="1" /></label>
                     <label class="field"><span>Rapid vertical speed</span><div class="input-wrap"><input name="g0VerticalSpeed" type="number" min="0" step="0.001" value="0.0211667" /><small class="unit-label">m/s</small></div></label>
                     <label class="field"><span>Rapid horizontal speed</span><div class="input-wrap"><input name="g0HorizontalSpeed" type="number" min="0" step="0.001" value="0.0423333" /><small class="unit-label">m/s</small></div></label>
-                    <label class="field"><span>Backtrack speed</span><div class="input-wrap"><input name="backtrack" type="number" min="0" step="0.001" placeholder="Disabled" /><small class="unit-label">m/s</small></div></label>
+                    <label class="field"><span>Backtrack speed</span><div class="input-wrap"><input name="backtrack" type="number" min="0" step="0.001" placeholder="Disabled (0)" /><small class="unit-label">m/s</small></div><small class="hint">Blank or 0 retracts between separate paths. A positive value enables linking at cutting depth.</small></label>
                     <label class="field"><span>Tile columns</span><input name="tileX" type="number" min="1" step="1" value="1" /></label>
                     <label class="field"><span>Tile rows</span><input name="tileY" type="number" min="1" step="1" value="1" /></label>
                     <label class="field"><span>Spindle spin-down time</span><div class="input-wrap"><input name="spindownTime" type="number" min="0" step="0.1" placeholder="Automatic" /><small class="unit-label">s</small></div></label>
@@ -173,13 +173,17 @@
             </section>
             <section class="panel output-panel">
               <div class="panel-heading">
-                <div><h2>Toolpaths</h2><p>G-code updates automatically when files or machining settings change.</p></div>
+                <div><h2>Toolpaths</h2><p>Adjust files and machining settings, then generate when you are ready.</p></div>
                 <label class="download-format" for="downloadExtension"><span>Download as</span><select id="downloadExtension"><option value="ngc">.ngc</option><option value="nc">.nc</option></select></label>
               </div>
               <div class="generate-row">
                 <div class="ready-state"><span><strong id="readyText">Add a board file to get started</strong><small id="readyHint">Your files stay in this local workspace.</small></span></div>
-                <span class="generation-status" id="generationStatus" role="status" aria-live="polite" data-state="idle">Waiting for board files</span>
+                <div class="generation-actions">
+                  <span class="generation-status" id="generationStatus" role="status" aria-live="polite" data-state="idle">Waiting for board files</span>
+                  <button type="button" class="primary-button" id="generateButton" disabled><span class="button-spinner" aria-hidden="true"></span><span class="generate-label">Generate toolpaths</span></button>
+                </div>
               </div>
+              <div class="generation-progress progress-bar striped" id="generationProgress" role="progressbar" aria-label="Toolpath generation progress" hidden></div>
               <div class="error-box" id="errorBox" role="alert" hidden></div>
               <section class="output-results" id="outputCard" hidden>
                 <div class="output-head">

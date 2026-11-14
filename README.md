@@ -26,7 +26,7 @@ Run under a dedicated OS account, keep the app bound to loopback, and place TLS 
 
 ## Included examples
 
-Choose an **Included example** in Board files to load its layers and generate toolpaths automatically. Uploading files or changing machining settings also regenerates automatically after a short pause; jobs run one at a time and superseded results are discarded.
+Choose an **Included example** in Board files to load its layers, or upload your own files. Click **Generate toolpaths** when ready. After changing machining settings, use **Re-generate toolpaths** to apply them. Generation runs only on demand, with an animated progress indicator; edits made during a job invalidate its result and wait for your next click.
 
 Add new boards under `gerber/`, preferably one subfolder per board. Use KiCad names such as `board-F_Cu.gbr`, `board-B_Cu.gbr`, `board-Edge_Cuts.gbr`, `board-PTH.drl`, `board-NPTH.drl`, and `board-job.gbrjob`. Front/back/outline names and `.gtl`, `.gbl`, `.gko`, and `.gm1` exports are also recognized. Gerber X2 file-function headers and KiCad job metadata supply layer roles when present. Internal copper and non-machining layers are skipped.
 
@@ -67,3 +67,7 @@ Main controls cover isolation milling and drilling, including drill depth/feed/s
 # pcb2gcode-app
 
 The visitor counter counts browsers using an anonymous cookie and stores its total in `.data/visitors.sqlite3`. Counts survive server restarts. Clearing cookies or using another browser counts as a new visitor. Set `PCB2GCODE_VISITOR_DB` to choose a different database path.
+
+The generation indicator uses the Basic Striped design from [progress-bar-library](https://github.com/freethinked/progress-bar-library) (MIT), with animated stripes in the app’s green theme.
+
+Backtracking is disabled by default with an explicit `--backtrack=0`. A blank Backtrack speed field means disabled; pcb2gcode’s implicit unlimited-retracing default is not used. Separate machining paths therefore retract to the configured Safe Z height. A positive Backtrack speed is an explicit opt-in to at-depth linking.
