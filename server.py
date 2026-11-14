@@ -9,12 +9,15 @@ import sqlite3
 import subprocess
 import tempfile
 import threading
+from contextlib import closing
 from email import policy
 from email.parser import BytesParser
 from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
+
+from examples import discover_examples, resolve_example_file
 
 ROOT = Path(__file__).resolve().parent
 SIMULATOR_ROOT = ROOT / "vendor/gcode-simulator/out"
@@ -24,7 +27,7 @@ PORT = int(os.environ.get("PCB2GCODE_PORT", "8080"))
 MAX_REQUEST = 100 * 1024 * 1024
 MAX_OUTPUT = 20 * 1024 * 1024
 MAX_FILES = 20
-EXAMPLE_FRONT = ROOT / "gerber" / "bike lcd-F_Cu.gbr"
+EXAMPLES_ROOT = ROOT / "gerber"
 FILE_EXTENSIONS = {".gbr", ".ger", ".gerber", ".pho", ".gtl", ".gbl", ".gm1", ".gko", ".drl", ".xln", ".txt", ".tap"}
 ROLES = {"front": "--front", "back": "--back", "outline": "--outline", "drill": "--drill"}
 UPLOAD_ROLES = {*ROLES, "npth"}
@@ -45,7 +48,7 @@ def register_visitor(cookie_header, database=None):
         visitor_id = secrets.token_hex(16)
     database = Path(database) if database is not None else VISITOR_DB
     database.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(database, timeout=10) as connection:
+    with closing(sqlite3.connect(database, timeout=10)) as connection, connection:
         connection.execute("CREATE TABLE IF NOT EXISTS visitors (id TEXT PRIMARY KEY)")
         connection.execute("INSERT OR IGNORE INTO visitors (id) VALUES (?)", (visitor_id,))
         count = connection.execute("SELECT COUNT(*) FROM visitors").fetchone()[0]
@@ -303,13 +306,22 @@ class Handler(BaseHTTPRequestHandler):
                 "Cache-Control": "no-store",
                 "Set-Cookie": f"pcb2gcode_visitor={visitor_id}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax",
             })
-        if path == "/api/example/front-gerber":
+        if path == "/api/examples":
             try:
-                data = EXAMPLE_FRONT.read_bytes()
+                catalog = discover_examples(EXAMPLES_ROOT)
             except OSError:
-                return self.respond(404, {"error": "The example front copper Gerber is unavailable."})
-            return self.send_bytes(200, "application/octet-stream", data,
-                                   {"Cache-Control": "no-cache", "Content-Disposition": 'attachment; filename="bike lcd-F_Cu.gbr"'})
+                return self.respond(503, {"error": "Included examples are unavailable."})
+            return self.send_bytes(200, "application/json; charset=utf-8", json.dumps({"examples": catalog}).encode("utf-8"), {"Cache-Control": "no-store"})
+        if path == "/api/examples/file":
+            relative = parse_qs(urlsplit(self.path).query).get("path", [""])[0]
+            try:
+                target = resolve_example_file(EXAMPLES_ROOT, relative)
+                if target.stat().st_size > MAX_REQUEST:
+                    return self.respond(413, {"error": "Example file exceeds the 100 MB limit."})
+                data = target.read_bytes()
+            except (OSError, ValueError):
+                return self.respond(404, {"error": "Example file not found."})
+            return self.send_bytes(200, "application/octet-stream", data, {"Cache-Control": "no-store"})
         if path == "/api/health":
             try:
                 result = subprocess.run([str(PCB2GCODE), "--version"], capture_output=True, text=True, timeout=10, check=False)
@@ -349,7 +361,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/features.txt":
             target = ROOT / "features.txt"
             content_type = "text/plain; charset=utf-8"
-        elif path in {"/index.html", "/app.js", "/styles.css", "/simulator.css", "/favicon.svg", "/New-Project.svg"}:
+        elif path in {"/index.html", "/app.js", "/preview.js", "/styles.css", "/simulator.css", "/favicon.svg", "/New-Project.svg"}:
             target = ROOT / path.lstrip("/")
             content_type = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml"}[target.suffix]
         else:

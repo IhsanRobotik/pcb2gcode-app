@@ -24,6 +24,14 @@ The service binds to loopback by default. Uploads and generated G-code are held 
 
 Run under a dedicated OS account, keep the app bound to loopback, and place TLS and access control at a reverse proxy if remote access is needed. Do not expose this unauthenticated local utility directly on a public interface. The server rejects cross-origin generation requests and passes browser settings through a validated CLI allowlist; input is never interpreted as a shell command.
 
+## Included examples
+
+Choose an **Included example** in Board files to load its layers and generate toolpaths automatically. Uploading files or changing machining settings also regenerates automatically after a short pause; jobs run one at a time and superseded results are discarded.
+
+Add new boards under `gerber/`, preferably one subfolder per board. Use KiCad names such as `board-F_Cu.gbr`, `board-B_Cu.gbr`, `board-Edge_Cuts.gbr`, `board-PTH.drl`, `board-NPTH.drl`, and `board-job.gbrjob`. Front/back/outline names and `.gtl`, `.gbl`, `.gko`, and `.gm1` exports are also recognized. Gerber X2 file-function headers and KiCad job metadata supply layer roles when present. Internal copper and non-machining layers are skipped.
+
+Click the refresh icon beside the picker to discover added or removed files; no code changes or server restart are needed. Files for each board should share a name prefix; job metadata can associate Gerbers with arbitrary filenames. Keep board variants in separate subfolders so each example has one file per role. Selecting an example replaces the current board files and clears the old preview while preserving machining settings, with board thickness updated from its job file when supplied.
+
 ## Contact icons
 
 The top bar uses the `bootstrap-icons` npm package. Its SVGs are embedded locally, so no Node process is needed at runtime. To refresh them:
@@ -36,6 +44,8 @@ npm run build:icons
 ## Simulator
 
 The 3D preview integrates [G-Code Simulator](https://github.com/federicovezzoli/gcode-simulator), an existing MIT-licensed CNC heightmap simulator. Its source is vendored at `vendor/gcode-simulator/`; upstream provenance and the local integration notes are in [`vendor/gcode-simulator/UPSTREAM.md`](vendor/gcode-simulator/UPSTREAM.md). The simulator accepts G0/G1/G2/G3 toolpaths, separates tool changes, and models material removal at configurable resolution. The app forwards generated G-code and stock dimensions to it in the browser.
+
+The preview initially shows the finished board. Use **Play** or **Restart** to begin from uncut stock, or use the timeline to inspect intermediate cuts. Rapid paths are hidden by default and can be enabled in preview settings; the tool and its clearance are shown only on the active board face. Reloading any toolpath resets to the finished preview. The combined view reverses back-side machine-coordinate mirroring for display and aligns front and back copper on opposite faces of a shared board; original downloads are unchanged.
 
 The checked-in static export is served at `/simulator/`. To rebuild it after changing simulator source:
 

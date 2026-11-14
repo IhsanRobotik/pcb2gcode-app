@@ -12,6 +12,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/simulator.css" />
+    <script src="/preview.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
@@ -40,6 +41,14 @@
           <div class="form-column">
             <section class="panel" id="files">
               <div class="panel-heading"><div><h2>Board files</h2><p>Add the layers you want to manufacture.</p></div><span class="optional-tag">GERBER · EXCELLON</span></div>
+              <div class="example-picker">
+                <label class="field" for="exampleBoard"><span>Included examples</span><select id="exampleBoard" disabled><option value="">Loading examples…</option></select></label>
+                <button type="button" class="example-refresh" id="refreshExamplesButton" aria-label="Refresh examples" title="Refresh examples"><span data-ui-icon="arrow-clockwise"><svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-clockwise" viewBox="0 0 16 16">
+  <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"/>
+  <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"/>
+</svg></span></button>
+                <small id="exampleHint">Choose a sample board to load and generate automatically, or upload your own files below.</small>
+              </div>
               <div class="upload-grid">
                 <label class="file-slot" data-role="front"><span class="slot-copy"><strong>Front copper</strong><small>Top copper traces</small></span><input type="file" accept=".gbr,.ger,.gerber,.pho,.gtl" /></label>
                 <label class="file-slot" data-role="back"><span class="slot-copy"><strong>Back copper</strong><small>Bottom copper traces</small></span><input type="file" accept=".gbr,.ger,.gerber,.pho,.gbl" /></label>
@@ -164,12 +173,12 @@
             </section>
             <section class="panel output-panel">
               <div class="panel-heading">
-                <div><h2>Generate toolpaths</h2><p>Review your setup, then create G-code for the loaded layers.</p></div>
+                <div><h2>Toolpaths</h2><p>G-code updates automatically when files or machining settings change.</p></div>
                 <label class="download-format" for="downloadExtension"><span>Download as</span><select id="downloadExtension"><option value="ngc">.ngc</option><option value="nc">.nc</option></select></label>
               </div>
               <div class="generate-row">
                 <div class="ready-state"><span><strong id="readyText">Add a board file to get started</strong><small id="readyHint">Your files stay in this local workspace.</small></span></div>
-                <button class="primary-button" id="generateButton"><span>Generate toolpaths</span></button>
+                <span class="generation-status" id="generationStatus" role="status" aria-live="polite" data-state="idle">Waiting for board files</span>
               </div>
               <div class="error-box" id="errorBox" role="alert" hidden></div>
               <section class="output-results" id="outputCard" hidden>

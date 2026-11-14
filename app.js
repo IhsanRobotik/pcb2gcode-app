@@ -5,11 +5,19 @@ const $ = (selector) => document.querySelector(selector);
 const fields = new Proxy({}, { get: (_, name) => document.querySelector(`[name="${String(name)}"]`) });
 let units = "metric";
 let lastOutput = [];
+let lastGenerationConfig = null;
 let generatedUrls = [];
 let boardMetadata = null;
 let pendingSimulatorPayload = null;
 let simulatorLoaded = false;
 let simulatorRequested = false;
+let generationVersion = 0;
+let generationRunning = false;
+let generationPending = false;
+let generationTimer = 0;
+let exampleLoading = false;
+let fileRevision = 0;
+let lastGenerationSignature = "";
 
 function safeName(name) { return name.replace(/[<>"']/g, ""); }
 function toast(message) {
@@ -38,35 +46,36 @@ function refreshFiles() {
   $("#readyText").textContent = count ? `${count} layer${count === 1 ? "" : "s"} ready · ${formatBytes(total)}` : "Add a board file to get started";
   $("#readyHint").textContent = count ? "Outer copper, outline and drill files are processed locally." : "Your files stay in this local workspace.";
   $(".ready-state").classList.toggle("ready", count > 0);
-  $("#generateButton").disabled = count === 0;
 }
 function formatBytes(n) { return n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`; }
 
 document.querySelectorAll(".file-slot input").forEach((input) => {
-  input.addEventListener("change", () => {
+  input.addEventListener("change", async () => {
     const file = input.files?.[0];
     if (file) {
       const role = input.closest(".file-slot").dataset.role;
       const total = [...selectedFiles.entries()].reduce((size, [key, item]) => size + (key === role ? 0 : item.size), file.size);
       if (total > 100 * 1024 * 1024) { toast("Board files must total 100 MB or less"); input.value = ""; return; }
-      selectedFiles.set(role, file);
-      if (role === "job") readJobFile(file);
+      selectedFiles.set(role, file); fileRevision++;
+      if (role === "job") await readJobFile(file);
     }
     input.value = "";
     refreshFiles();
+    if (file) scheduleGeneration();
   });
 });
 document.querySelectorAll(".file-slot").forEach((slot) => {
   slot.addEventListener("dragover", (e) => { e.preventDefault(); slot.classList.add("has-file"); });
   slot.addEventListener("dragleave", () => { if (!selectedFiles.has(slot.dataset.role)) slot.classList.remove("has-file"); });
-  slot.addEventListener("drop", (e) => {
+  slot.addEventListener("drop", async (e) => {
     e.preventDefault(); const file = e.dataTransfer.files[0];
     if (file) {
       const role = slot.dataset.role;
       const total = [...selectedFiles.entries()].reduce((size, [key, item]) => size + (key === role ? 0 : item.size), file.size);
       if (total > 100 * 1024 * 1024) { toast("Board files must total 100 MB or less"); return; }
-      selectedFiles.set(role, file); refreshFiles();
-      if (role === "job") readJobFile(file);
+      selectedFiles.set(role, file); fileRevision++; refreshFiles();
+      if (role === "job") await readJobFile(file);
+      scheduleGeneration();
     }
   });
 });
@@ -211,10 +220,18 @@ function simulatorFilePreview(output) {
   return simulatorToolpath(`M0 (MSG, Change tool for ${role.label})\n${output.content}`);
 }
 
-function combineToolpathFiles(outputs) {
+function combineToolpathFiles(outputs, config = lastGenerationConfig || collectConfig()) {
+  const hasFront = outputs.some((output) => toolpathRole(output.name).order === 0);
+  const hasBack = outputs.some((output) => toolpathRole(output.name).order === 1);
+  const workSide = (side) => side === "back" || (side === "auto" && !hasFront && hasBack) ? "back" : "front";
   return [...outputs]
     .sort((a, b) => toolpathRole(a.name).order - toolpathRole(b.name).order || a.name.localeCompare(b.name))
-    .map((output) => `M0 (MSG, Change tool for ${toolpathRole(output.name).label})\n${output.content.trim()}`)
+    .map((output) => {
+      const role = toolpathRole(output.name);
+      const sourceSide = role.order === 1 ? "back" : role.order === 2 ? workSide(config.drillSide) : role.order === 3 ? workSide(config.cutSide) : "front";
+      const content = sourceSide === "back" ? PCBPreview.reflectToolpath(output.content, { axis: Number(config.mirrorAxis) || 0, flipY: Boolean(config.mirrorYAxis) }) : output.content;
+      return `M0 (MSG, Change tool for ${role.label})\n${content.trim()}`;
+    })
     .join("\n\n");
 }
 
@@ -324,23 +341,68 @@ $("#viewCombinedToolpath").addEventListener("click", () => {
   }
 });
 
-$("#generateButton").addEventListener("click", async () => {
-  const button = $("#generateButton"), error = $("#errorBox"); error.hidden = true;
+function setGenerationStatus(text, state = "idle") {
+  $("#generationStatus").textContent = text;
+  $("#generationStatus").dataset.state = state;
+  $("#outputCard").setAttribute("aria-busy", String(state === "busy"));
+}
+function hasBoardFiles() {
+  return [...selectedFiles.keys()].some((role) => engineRoles.has(role));
+}
+function scheduleGeneration(delay = 600, force = false) {
+  const values = [...$("#settings").querySelectorAll("input, select, textarea")].map((input) => [input.name, input.type === "checkbox" ? input.checked : input.value]);
+  const signature = JSON.stringify([fileRevision, units, values]);
+  if (!force && signature === lastGenerationSignature) return;
+  lastGenerationSignature = signature;
+  generationVersion++;
+  generationPending = hasBoardFiles();
+  window.clearTimeout(generationTimer);
+  generationTimer = 0;
+  $("#errorBox").hidden = true;
+  $("#outputCard").hidden = true;
+  $("#simulatorPanel").hidden = true;
+  if (!generationPending) {
+    setGenerationStatus("Waiting for board files");
+    return;
+  }
+  setGenerationStatus(generationRunning ? "Queued latest changes…" : "Preparing toolpaths…", "busy");
+  generationTimer = window.setTimeout(() => {
+    generationTimer = 0;
+    generateToolpaths();
+  }, delay);
+}
+async function generateToolpaths() {
+  if (generationRunning || exampleLoading || !generationPending || !hasBoardFiles()) return;
+  generationRunning = true;
+  generationPending = false;
+  const version = generationVersion;
+  const error = $("#errorBox");
+  error.hidden = true;
+  setGenerationStatus("Generating…", "busy");
   try {
     const config = collectConfig();
-    if (selectedFiles.size === 0) throw new Error("Choose at least one board file first.");
     const data = new FormData(); data.append("config", JSON.stringify(config));
     for (const [role, file] of selectedFiles) if (engineRoles.has(role)) data.append(role, file, file.name);
-    button.disabled = true; button.querySelector("span").textContent = "Generating…";
     const response = await fetch("/api/generate", { method: "POST", body: data });
     const result = await response.json();
+    if (version !== generationVersion || exampleLoading) return;
     if (!response.ok) throw new Error([result.error, result.details].filter(Boolean).join("\n"));
-    displayOutputs(result); toast(`${result.files.length} output file${result.files.length === 1 ? "" : "s"} generated`);
+    lastGenerationConfig = config;
+    displayOutputs(result);
+    setGenerationStatus(`${result.files.length} file${result.files.length === 1 ? "" : "s"} ready`, "ready");
   } catch (err) {
+    if (version !== generationVersion || exampleLoading) return;
     error.textContent = err.message || "The job could not be generated."; error.hidden = false;
-    error.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  } finally { button.disabled = selectedFiles.size === 0; button.querySelector("span").textContent = "Generate toolpaths"; }
-});
+    setGenerationStatus("Generation failed", "error");
+  } finally {
+    generationRunning = false;
+    if (generationPending && !exampleLoading && !generationTimer) {
+      generationTimer = window.setTimeout(() => { generationTimer = 0; generateToolpaths(); }, 0);
+    }
+  }
+}
+$("#settings").addEventListener("input", () => scheduleGeneration());
+$("#settings").addEventListener("change", () => scheduleGeneration());
 
 const browserColorScheme = window.matchMedia("(prefers-color-scheme: dark)");
 let selectedTheme = localStorage.getItem("toolpath-theme");
@@ -374,22 +436,100 @@ document.querySelectorAll("[data-units]").forEach((button) => button.addEventLis
   units = next;
   document.querySelectorAll("[data-units]").forEach((item) => item.classList.toggle("selected", item === button));
   document.querySelectorAll(".unit-label").forEach((label) => { if (["feedRate", "drillFeed", "cutFeed", "millVertFeed", "cutVertFeed", "alProbeFeed"].includes(label.previousElementSibling.name)) label.textContent = next === "metric" ? "mm/min" : "in/min"; else if (label.textContent === "mm" || label.textContent === "in") label.textContent = next === "metric" ? "mm" : "in"; });
+  scheduleGeneration();
 }));
 
-async function loadExampleGerber() {
+let includedExamples = [];
+const exampleRoleLabels = { front: "front copper", back: "back copper", outline: "outline", drill: "plated drill", npth: "non-plated drill", job: "board metadata" };
+function updateExampleSelection() {
+  const example = includedExamples.find((item) => item.id === $("#exampleBoard").value);
+  $("#exampleHint").textContent = example
+    ? `${example.files.map((file) => exampleRoleLabels[file.role]).join(" · ")}. Loading replaces the selected board files.`
+    : "Choose a sample board to load and generate automatically, or upload your own files below.";
+}
+async function refreshExamples() {
+  const select = $("#exampleBoard"), refresh = $("#refreshExamplesButton");
+  const previous = select.value;
+  refresh.disabled = true;
+  select.disabled = true;
   try {
-    const response = await fetch("/api/example/front-gerber");
-    if (!response.ok) throw new Error("Example front copper Gerber could not be loaded.");
-    const file = new File([await response.blob()], "bike lcd-F_Cu.gbr", { type: "application/octet-stream" });
-    selectedFiles.set("front", file);
-    refreshFiles();
-    $("#generateButton").click();
+    const response = await fetch("/api/examples", { cache: "no-store" });
+    if (!response.ok) throw new Error("Included examples could not be loaded.");
+    const result = await response.json();
+    if (!Array.isArray(result.examples)) throw new Error("Invalid example catalog.");
+    includedExamples = result.examples;
+    select.replaceChildren(new Option(includedExamples.length ? "Choose an example board…" : "No included examples found", ""));
+    for (const example of includedExamples) select.add(new Option(example.name, example.id));
+    if (includedExamples.some((item) => item.id === previous)) select.value = previous;
+    select.disabled = includedExamples.length === 0;
+    updateExampleSelection();
+    if (!includedExamples.length) $("#exampleHint").textContent = "No examples available yet. You can still upload your own board files below.";
   } catch (error) {
-    toast(error.message || "Example front copper Gerber could not be loaded.");
+    includedExamples = [];
+    select.replaceChildren(new Option("Examples unavailable", ""));
+    $("#exampleHint").textContent = "Could not load examples. Refresh to try again, or upload your own files below.";
+  } finally {
+    refresh.disabled = false;
+  }
+}
+$("#exampleBoard").addEventListener("change", () => { updateExampleSelection(); loadSelectedExample(); });
+$("#refreshExamplesButton").addEventListener("click", refreshExamples);
+async function loadSelectedExample() {
+  const example = includedExamples.find((item) => item.id === $("#exampleBoard").value);
+  if (!example) return;
+  const resumeGeneration = generationRunning || generationPending;
+  let loadedExample = false;
+  exampleLoading = true;
+  generationVersion++;
+  generationPending = false;
+  window.clearTimeout(generationTimer); generationTimer = 0;
+  setGenerationStatus("Loading example…", "busy");
+  $("#exampleBoard").disabled = true;
+  $("#refreshExamplesButton").disabled = true;
+  try {
+    if (example.files.reduce((size, file) => size + file.size, 0) > 100 * 1024 * 1024) throw new Error("Board files must total 100 MB or less.");
+    const assignedRoles = new Set();
+    for (const file of example.files) {
+      if (assignedRoles.has(file.role)) throw new Error(`This example has multiple ${exampleRoleLabels[file.role]} files. Place each board variant in its own subfolder.`);
+      assignedRoles.add(file.role);
+    }
+    const loaded = await Promise.all(example.files.map(async (entry) => {
+      const response = await fetch(entry.url, { cache: "no-store" });
+      if (!response.ok) throw new Error(`Could not load ${entry.name}. Refresh the examples and try again.`);
+      const safeFilename = entry.name.normalize("NFKD").replace(/[^A-Za-z0-9_. -]/g, "_").slice(-120);
+      return [entry.role, new File([await response.blob()], safeFilename, { type: "application/octet-stream" })];
+    }));
+    if (loaded.reduce((size, [, file]) => size + file.size, 0) > 100 * 1024 * 1024) throw new Error("Board files must total 100 MB or less.");
+    selectedFiles.clear();
+    for (const [role, file] of loaded) selectedFiles.set(role, file);
+    fileRevision++;
+    boardMetadata = null; renderBoardMetadata();
+    if (selectedFiles.has("job")) await readJobFile(selectedFiles.get("job"));
+    generatedUrls.forEach(URL.revokeObjectURL); generatedUrls = []; lastOutput = [];
+    pendingSimulatorPayload = null;
+    $("#outputCard").hidden = true;
+    $("#outputList").replaceChildren();
+    $("#engineLog").textContent = "";
+    $("#simulatorPanel").hidden = true;
+    $("#simulatorFrame").removeAttribute("src");
+    simulatorLoaded = false; simulatorRequested = false;
+    $("#errorBox").hidden = true;
+    refreshFiles();
+    loadedExample = true;
+    $("#exampleHint").textContent = `${example.name} loaded. Toolpaths are generated automatically.`;
+  } catch (error) {
+    toast(error.message || "Could not load this example.");
+    $("#exampleHint").textContent = error.message || "Could not load this example.";
+  } finally {
+    exampleLoading = false;
+    $("#exampleBoard").disabled = false;
+    $("#refreshExamplesButton").disabled = false;
+    if (loadedExample || resumeGeneration || generationPending) scheduleGeneration(0, true);
+    else setGenerationStatus(lastOutput.length ? `${lastOutput.length} files ready` : "Waiting for board files", lastOutput.length ? "ready" : "idle");
   }
 }
 refreshFiles();
-loadExampleGerber();
+refreshExamples();
 
 async function loadVisitorCount() {
   try {

@@ -2,7 +2,8 @@
   "name": "pcb2gcode-app",
   "private": true,
   "scripts": {
-    "build:icons": "node scripts/build-icons.cjs"
+    "build:icons": "node scripts/build-icons.cjs",
+    "test": "node --test tests/*.test.cjs"
   },
   "devDependencies": {
     "bootstrap-icons": "^1.13.2"
