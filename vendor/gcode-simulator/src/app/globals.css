@@ -1,0 +1,202 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+:root,
+.dark {
+  --background: #101211;
+  --foreground: #e9ece9;
+  --card: #171a18;
+  --card-foreground: #e9ece9;
+  --popover: #171a18;
+  --popover-foreground: #e9ece9;
+  --primary: #006400;
+  --primary-foreground: #D0F0C0;
+  --secondary: #1c201e;
+  --secondary-foreground: #e9ece9;
+  --muted: #1c201e;
+  --muted-foreground: #929b94;
+  --accent: #1c201e;
+  --accent-foreground: #e9ece9;
+  --border: #2a302c;
+  --input: #2a302c;
+  --ring: #006400;
+  --font-geist-sans: 'DM Sans', Inter, system-ui, sans-serif;
+  --font-geist-mono: 'DM Mono', ui-monospace, monospace;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-geist-sans);
+}
+
+.pcb-theme-light {
+  --background: #f2f4f0;
+  --foreground: #202720;
+  --card: #ffffff;
+  --card-foreground: #202720;
+  --popover: #ffffff;
+  --popover-foreground: #202720;
+  --primary: #006400;
+  --primary-foreground: #D0F0C0;
+  --secondary: #D0F0C0;
+  --secondary-foreground: #283128;
+  --muted: #eff7eb;
+  --muted-foreground: #667168;
+  --accent: #D0F0C0;
+  --accent-foreground: #283128;
+  --border: #d9ded8;
+  --input: #d9ded8;
+  --ring: #006400;
+}
+
+.pcb-theme-light body { background: #f2f4f0; color: #202720; }
+.pcb-theme-light .border-zinc-800 { border-color: #d9ded8; }
+.pcb-theme-light .bg-zinc-900 { background-color: #f8faf7; }
+.pcb-theme-light .bg-zinc-900\/60 { background-color: #f8faf7; }
+.pcb-theme-light .text-zinc-100 { color: #202720; }
+.pcb-theme-light .text-zinc-200 { color: #283128; }
+.pcb-theme-light .text-zinc-300 { color: #39433a; }
+.pcb-theme-light .text-zinc-400 { color: #455046; }
+.pcb-theme-light .text-zinc-500 { color: #667168; }
+.pcb-theme-light .text-zinc-600 { color: #778278; }
+.bg-green-600 { background-color: #006400 !important; color: #D0F0C0 !important; }
+.hover\:bg-green-500:hover { background-color: #D0F0C0 !important; color: #006400 !important; }
+.accent-amber-400 { accent-color: #006400; }
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+.rebuild-preview-button{background:#c6ddba;color:#24442b;border:1px solid #b0cba1;box-shadow:0 2px 5px #00000014;transition:background .18s,border-color .18s,box-shadow .18s}
+.rebuild-preview-button:hover:not(:disabled){background:#D0F0C0;border-color:#bdd7af;box-shadow:0 3px 8px #0000001a}
+.rebuild-preview-button:active:not(:disabled){background:#b8d4aa;box-shadow:inset 0 1px 2px #24442b1a}
+.rebuild-preview-button:focus-visible{outline:2px solid #7eaa70;outline-offset:3px}
+.pcb-theme-light .rebuild-preview-button{background:#e5f0df;color:#2e5333;border-color:#b9cfae;box-shadow:0 2px 5px #24442b0a}
+.pcb-theme-light .rebuild-preview-button:hover:not(:disabled){background:#D0F0C0;border-color:#a9c797}
+.pcb-theme-light .rebuild-preview-button:active:not(:disabled){background:#bfd9ae}
